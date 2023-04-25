@@ -44,7 +44,6 @@ driveService = googleapiclient.discovery.build('drive', 'v3',
 # ).execute()
 # THIS PART OF CODE IS NEEDED TO OPEN ACCESS FOR VIEW AND EDITING DATA
 
-
 def give_access_from_google_drive(city_spreadSheetId):
     try:
         access = driveService.permissions().create(
@@ -58,13 +57,12 @@ def give_access_from_google_drive(city_spreadSheetId):
         print(f'Произошла ошибка: {error}')
     # TAKING CITY NAME AS AN INPUT AND CREATING NEW SPREADSHEET
 
-
-def download_file_from_google_sheet_sells(spreadsheetId, city_name, chatId):
+def download_file_from_google_sheet(spreadsheetId, city_name, chatId, document_name):
     # Set the format you want to export the file to
     EXPORT_MIMETYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     # Set the path where you want to save the exported file
-    EXPORT_PATH = r"C:\Users\Nurgissa\PycharmProjects\TeleBotSheet\downloads\sells.xlsx"
-
+    EXPORT_PATH = r"C:\Users\Nurgissa\PycharmProjects\TeleBotSheet\downloads"
+    EXPORT_PATH = EXPORT_PATH + f'\{document_name}' + ".xlsx"
     # Save the file to a specific directory
     file_content = driveService.files().export(fileId=spreadsheetId, mimeType=EXPORT_MIMETYPE).execute()
     with open(EXPORT_PATH, 'wb') as f:
@@ -74,10 +72,12 @@ def download_file_from_google_sheet_sells(spreadsheetId, city_name, chatId):
     formatted_time = now.strftime("%Y-%m-%d_%H-%M")
 
     # specify the full path of the old file and the new file name
-    standard_file_path_name = r'C:\Users\Nurgissa\PycharmProjects\TeleBotSheet\downloads\sells.xlsx'
+    standard_file_path_name = r'C:\Users\Nurgissa\PycharmProjects\TeleBotSheet\downloads'
+    standard_file_path_name = standard_file_path_name + f'\{document_name}' + ".xlsx"
+
     standard_file_path = r'C:\Users\Nurgissa\PycharmProjects\TeleBotSheet\downloads'
 
-    dynamic_file_name = f"\{city_name}_sells_{formatted_time}.xlsx"
+    dynamic_file_name = f"\{city_name}_{document_name}_{formatted_time}.xlsx"
     new_file_path_name = standard_file_path + dynamic_file_name
 
     try:
@@ -97,7 +97,6 @@ def download_file_from_google_sheet_sells(spreadsheetId, city_name, chatId):
         print("File renamed successfully.")
     except OSError as error:
         print(error)
-
 
 def reading_from_remains_sheet(city_name, chatId):
     sheet_name = "Ост"
@@ -200,7 +199,8 @@ def reading_from_remains_sheet(city_name, chatId):
             except googleapiclient.errors.HttpError as error:
                 print(f'Произошла ошибка: {error}')
 
-            download_file_from_google_sheet_remains(city_spreadSheetId, title, chatId)
+            document_name = "remains"
+            download_file_from_google_sheet(city_spreadSheetId, title, chatId, document_name)
 
             print('https://docs.google.com/spreadsheets/d/' + city_spreadSheetId)
             try:
@@ -211,47 +211,6 @@ def reading_from_remains_sheet(city_name, chatId):
             print("Values data is null")
     else:
         bot.send_message(chatId, "Города с таким названием нету в базе данных")
-
-
-def download_file_from_google_sheet_remains(spreadsheetId, city_name, chatId):
-    EXPORT_MIMETYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-
-    # Set the path where you want to save the exported file
-    EXPORT_PATH = r"C:\Users\Nurgissa\PycharmProjects\TeleBotSheet\downloads\remains.xlsx"
-
-    # Save the file to a specific directory
-    file_content = driveService.files().export(fileId=spreadsheetId, mimeType=EXPORT_MIMETYPE).execute()
-    with open(EXPORT_PATH, 'wb') as f:
-        f.write(file_content)
-
-    now = datetime.now()
-    formatted_time = now.strftime("%Y-%m-%d_%H-%M")
-
-    # specify the full path of the old file and the new file name
-    standard_file_path_name = r'C:\Users\Nurgissa\PycharmProjects\TeleBotSheet\downloads\remains.xlsx'
-    standard_file_path = r'C:\Users\Nurgissa\PycharmProjects\TeleBotSheet\downloads'
-
-    dynamic_file_name = f"\{city_name}_remains_{formatted_time}.xlsx"
-    new_file_path_name = standard_file_path + dynamic_file_name
-
-    try:
-        os.rename(standard_file_path_name, new_file_path_name)
-        print("File renamed for sending successfully.")
-    except OSError as error:
-        print(error)
-    print(new_file_path_name)
-
-    document_path = new_file_path_name
-    document = open(document_path, 'rb')
-    bot.send_document(chatId, document)
-    print(chatId)
-    document.close()
-
-    try:
-        os.rename(new_file_path_name, standard_file_path_name)
-        print("File renamed back successfully.")
-    except OSError as error:
-        print(error)
 
 
 def reading_from_sells_sheet(city_name, month_number, chatId):
@@ -398,14 +357,14 @@ def reading_from_sells_sheet(city_name, month_number, chatId):
                 response = request.execute()
             except googleapiclient.errors.HttpError as error:
                 print(f'Произошла ошибка: {error}')
-            download_file_from_google_sheet_sells(city_spreadSheetId, title, chatId)
+            document_name = "sells"
+            download_file_from_google_sheet(city_spreadSheetId, title, chatId, document_name)
             print('https://docs.google.com/spreadsheets/d/' + city_spreadSheetId)
             driveService.files().delete(fileId=city_spreadSheetId).execute()
         else:
             print("Values data is null")
     else:
         bot.send_message(chatId, "Города с таким названием нету в базе данных")
-
 
 def start():
     print("Please, choose a sells or remains 1/2? ")
@@ -418,7 +377,6 @@ def start():
         print("There no such variants, please choose correct one from 1 or 2")
         start()
 
-
 def authorization(telegram_id):
     city_name = ""
     sheet_name = "Права"
@@ -430,22 +388,15 @@ def authorization(telegram_id):
             city_name = row[1]
     return city_name
 
-
 keyboard_sell_remain = InlineKeyboardMarkup()
 sells_button = InlineKeyboardButton('Продажи', callback_data='sell_button')
 remains_button = InlineKeyboardButton('Остатки', callback_data='remains_button')
 keyboard_sell_remain.add(sells_button, remains_button)
 
-
 @bot.message_handler(commands=['start', 'get'])
 def send_hello_message(message):
     username = message.from_user.username
-    # Получаем объект User для пользователя
-    user = message.from_user
-    # Получаем ссылку на профиль пользователя
-    # user_link = telebot.util.user_link(user.id)
     print(username)
-    # print(user_link)
     bot.reply_to(message, "Добро пожаловать в бот", reply_markup=keyboard_sell_remain)
 
 
