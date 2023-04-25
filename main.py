@@ -324,9 +324,7 @@ def reading_from_sells_sheet(city_name, month_number, chatId):
 
         #
         #
-        #
         give_access_from_google_drive(city_spreadSheetId)
-        #
         #
         #
 
