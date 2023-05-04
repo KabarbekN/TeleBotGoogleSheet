@@ -18,14 +18,16 @@ service = discovery.build('sheets', 'v4', http=httpAuth)  # Выбираем р�
 driveService = googleapiclient.discovery.build('drive', 'v3',
                                                http=httpAuth)  # Выбираем работу с Google Drive и 3 версию API
 
+
 def authorization(telegram_id):
-    #time.sleep(random.randrange(1,5))
-    city_name = ""
+    # time.sleep(random.randrange(1,5))
+    city_user_name = ['', '']
     sheet_name = "Права"
     values = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=sheet_name).execute()
     values_data = values['values']
 
     for row in values_data:
         if str(row[0]) == str(telegram_id):
-            city_name = row[1]
-    return city_name
+            city_user_name[0] = row[1]
+            city_user_name[1] = row[2]
+    return city_user_name

@@ -1,15 +1,7 @@
-import os
-import random
-import time
-from datetime import datetime
-
 import googleapiclient.discovery
 import httplib2
-import numpy as np
-import telebot
 from googleapiclient import discovery
 from oauth2client.service_account import ServiceAccountCredentials
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 CREDENTIALS_FILE = r"C:\Users\Nurgissa\PycharmProjects\TeleBotSheet\key_for_google_cloud\speedy-toolbox-384010-87d27fc12adc.json"  # Имя файла с закрытым ключом, вы должны подставить свое
 spreadsheet_id = '1rZG1wfIw7oetjxISh-8Z7jrPT3KBvZJr-B8dExGU_uA'

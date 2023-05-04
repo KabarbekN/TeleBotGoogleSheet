@@ -1,22 +1,26 @@
 # Подключаем библиотеки
-import os
-import random
-import time
-from datetime import datetime
 
 import googleapiclient.discovery
 import httplib2
-import numpy as np
 import telebot
 from googleapiclient import discovery
 from oauth2client.service_account import ServiceAccountCredentials
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-from access_file_in_google_sheet import give_access_from_google_drive
+from pprint import pprint
 from authorization import authorization
-from download_send_file import download_file_from_google_sheet
 from read_remains_google import reading_from_remains_sheet
 from read_sales_google import reading_from_sells_sheet
+from telebot.async_telebot import AsyncTeleBot
+from telebot import types
+from telebot.types import Message
+from telebot.async_telebot import AsyncTeleBot
+from telebot import asyncio_filters
+from telebot.asyncio_storage import StateMemoryStorage
+# new feature for states.
+from telebot.asyncio_handler_backends import State, StatesGroup
+
+# default state storage is statememorystorage
+
 
 # from authorization import *
 
@@ -30,13 +34,19 @@ sheets_name_and_id = {696285621: "Пж",
                       116876809: "Ост",
                       1336947730: "Права"}  # dictionary with id of sheets
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = AsyncTeleBot(BOT_TOKEN, state_storage=StateMemoryStorage())
+
+class SellsStates(StatesGroup):  # statesgroup should contain states
+    city = State()
+    month = State()
+
+class RemainsStates(StatesGroup):
+    city = State()  #
 
 # Читаем ключи из файла
 credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE,
                                                                ['https://www.googleapis.com/auth/spreadsheets',
                                                                 'https://www.googleapis.com/auth/drive'])  # Пишем названия гугл апишек с которыми будем работать
-
 httpAuth = credentials.authorize(httplib2.Http())  # Авторизуемся в системе
 service = discovery.build('sheets', 'v4', http=httpAuth)  # Выбираем работу с таблицами и 4 версию API
 
@@ -44,7 +54,6 @@ service = discovery.build('sheets', 'v4', http=httpAuth)  # Выбираем р�
 
 driveService = googleapiclient.discovery.build('drive', 'v3',
                                                http=httpAuth)  # Выбираем работу с Google Drive и 3 версию API
-
 
 # access = driveService.permissions().create(
 #     fileId = spreadsheet_id,
@@ -54,120 +63,136 @@ driveService = googleapiclient.discovery.build('drive', 'v3',
 # ).execute()
 # THIS PART OF CODE IS NEEDED TO OPEN ACCESS FOR VIEW AND EDITING DATA
 
-def start():
-    print("Please, choose a sells or remains 1/2? ")
-    choice = int(input())
-    if choice == 1:
-        reading_from_sells_sheet()
-    elif choice == 2:
-        reading_from_remains_sheet()
-    else:
-        print("There no such variants, please choose correct one from 1 or 2")
-        start()
-
 keyboard_sell_remain = InlineKeyboardMarkup()
 sells_button = InlineKeyboardButton('Продажи', callback_data='sell_button')
 remains_button = InlineKeyboardButton('Остатки', callback_data='remains_button')
 keyboard_sell_remain.add(sells_button, remains_button)
 
 @bot.message_handler(commands=['start', 'get'])
-def send_hello_message(message):
+async def send_hello_message(message):
     username = message.from_user.username
     print(username)
-    bot.reply_to(message, "Добро пожаловать в бот", reply_markup=keyboard_sell_remain)
-
-
+    await bot.reply_to(message, "Добро пожаловать в бот", reply_markup=keyboard_sell_remain)
 @bot.callback_query_handler(func=lambda call: True)
-def handle_button_press(call):
+async def handle_button_press(call):
+    global sells_city
+    sells_city = ''
     if call.data == 'sell_button':
-        bot.edit_message_reply_markup(call.message.chat.id,
-                                      call.message.message_id,
-                                      reply_markup=None)
-
-        city_name = authorization(call.message.chat.id)
-        if len(city_name) == 0:
-            bot.send_message(call.message.chat.id,
-                             f"К сожалению, у вас нету доступа к данным свяжитесь с {telegram_support_acc}")
-        elif city_name == 'Альфа':
-            bot.send_message(call.message.chat.id,
-                             "Введите название города,"
-                             "по которому хотите получить данные")
-            bot.register_next_step_handler(call.message, get_city_name_from_sells)
+        await bot.edit_message_reply_markup(call.message.chat.id,
+                                            call.message.message_id,
+                                            reply_markup=None)
+        city_user_name = authorization(call.message.chat.id)
+        if len(city_user_name[0]) == 0:
+            await bot.send_message(call.message.chat.id,
+                                   f"К сожалению, у вас нету доступа к данным свяжитесь с {telegram_support_acc}")
+        elif city_user_name[0] == 'Альфа':
+            await bot.send_message(call.message.chat.id, f"Добро пожаловать, {city_user_name[1]}")
+            await bot.set_state(call.message.chat.id, SellsStates.city, call.message.chat.id)
+            await bot.send_message(call.message.chat.id,
+                                   "Введите название города,"
+                                   "по которому хотите получить данные")
         else:
-            bot.send_message(call.message.chat.id, "Введите номер месяца, по которому вы хотите получить данные или же 0 если хотите получить все данные")
 
-            @bot.message_handler()
-            def get_month_number(message):
-                month_number = str(message.text)
-                if month_number.isdigit():
-                    month_number = int(month_number)
-                    if month_number == 0 or 1 <= month_number <= 12:
-                        bot.send_message(call.message.chat.id, "Ваш запрос обрабатывается, пожалуйста подождите")
-                        reading_from_sells_sheet(city_name, month_number, call.message.chat.id)
-                    else:
-                        bot.send_message(message.chat.id, f"{month_number} месяца не существует")
-                        bot.send_message(message.chat.id, "Для возобновления работы нажмите /get ")
-                else:
-                    bot.send_message(message.chat.id, f"{message.text} не является месяцом")
-                    bot.send_message(message.chat.id, "Для возобновления работы нажмите /get ")
+            sells_city = city_user_name[0]
+            await bot.send_message(call.message.chat.id, f"Добро пожаловать, {city_user_name[1]}")
+            await bot.set_state(call.message.chat.id, SellsStates.month, call.message.chat.id)
+            await bot.send_message(call.message.chat.id,
+                                    "Введите номер месяца, по которому вы хотите получить данные или же 0 если хотите получить все данные")
     elif call.data == 'remains_button':
-        bot.edit_message_reply_markup(call.message.chat.id,
-                                      call.message.message_id,
-                                      reply_markup=None)
+        await bot.edit_message_reply_markup(call.message.chat.id,
+                                            call.message.message_id,
+                                            reply_markup=None)
 
-        city_name = authorization(call.message.chat.id)
-        if len(city_name) == 0:
-            bot.send_message(call.message.chat.id,
-                             f"К сожалению, у вас нету доступа к данным свяжитесь с {telegram_support_acc}")
-            bot.send_message(call.chat.id, "Для возобновления работы нажмите /get ")
+        city_user_name = authorization(call.message.chat.id)
+        if len(city_user_name[0]) == 0:
+            await bot.send_message(call.message.chat.id,
+                                   f"К сожалению, у вас нету доступа к данным свяжитесь с {telegram_support_acc}")
+            await bot.send_message(call.chat.id, "Для возобновления работы нажмите /get ")
 
-        elif city_name == 'Альфа':
-            bot.send_message(call.message.chat.id,
-                             "Введите название города,"
-                             "по которому хотите получить данные")
-            bot.register_next_step_handler(call.message, get_city_name_from_remains)
+        elif city_user_name[0] == 'Альфа':
+            await bot.send_message(call.message.chat.id, f"Добро пожаловать, {city_user_name[1]}")
+            await bot.set_state(call.message.chat.id, RemainsStates.city, call.message.chat.id)
+            await bot.send_message(call.message.chat.id,
+                                   "Введите название города,"
+                                   "по которому хотите получить данные")
+
+
+            # bot.register_next_step_handler(call.message, get_city_name_from_remains)
+
         else:
-            bot.send_message(call.message.chat.id, "Ваш запрос обрабатывается, пожалуйста подождите")
-            reading_from_remains_sheet(city_name, call.message.chat.id)
+            await bot.send_message(call.message.chat.id, f"Добро пожаловать, {city_user_name[1]}")
+            await bot.send_message(call.message.chat.id, "Ваш запрос обрабатывается, пожалуйста подождите")
+            await reading_from_remains_sheet(city_user_name[0], call.message.chat.id)
+@bot.message_handler(state="*", commands='cancel')
+async def any_state(message):
+    """
+    Cancel state
+    """
+    await bot.send_message(message.chat.id, "Your state was cancelled.")
+    await bot.delete_state(message.from_user.id, message.chat.id)
 
-
-def get_city_name_from_remains(message):
-    city_name = str(message.text)
+@bot.message_handler(state=RemainsStates.city)
+async def month_get_sells_city_user(message):
+    async with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
+        data['city'] = message.text
+    await bot.delete_state(message.from_user.id, message.chat.id)
+    global remains_city
+    city_name = str(data['city'])
+    city_name = city_name.lower()
     city_name = city_name.title()
     if len(city_name) > 0:
-        bot.send_message(message.chat.id, "Ваш запрос обрабатывается, пожалуйста подождите")
-        reading_from_remains_sheet(city_name, message.chat.id)
+        await bot.set_state(message.chat.id, SellsStates.month, message.chat.id)
+        remains_city = city_name
+        await bot.send_message(message.chat.id, "Ваш запрос обрабатывается, пожалуйста подождите")
+        await reading_from_remains_sheet(remains_city, message.chat.id)
     else:
-        bot.send_message(message.chat.id, f"Города {city_name} не существует")
-        bot.send_message(message.chat.id, "Для возобновления работы нажмите /get ")
+        await bot.send_message(message.chat.id, f"Города {city_name} не существует")
+        await bot.send_message(message.chat.id, "Для возобновления работы нажмите /get ")
 
-
-
-def get_city_name_from_sells(message):
-    city_name = str(message.text)
+@bot.message_handler(state=SellsStates.city)
+async def month_get_sells_city_user(message):
+    async with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
+        data['city'] = message.text
+    await bot.delete_state(message.from_user.id, message.chat.id)
+    global sells_city
+    city_name = str(data['city'])
+    city_name = city_name.lower()
     city_name = city_name.title()
     if len(city_name) > 0:
-        bot.send_message(message.chat.id,
-                         "Введите номер месяца, по которому вы хотите получить данные или же 0 если хотите получить все данные")
-        bot.register_next_step_handler(message, get_admin_month_of_city_from_sells, city_name)
+        await bot.set_state(message.chat.id, SellsStates.month, message.chat.id)
+        sells_city = city_name
+        await bot.send_message(message.chat.id,
+                               "Введите номер месяца, по которому вы хотите получить данные или же 0 если хотите получить все данные")
     else:
-        bot.send_message(message.chat.id, f"Города {city_name} не существует")
-        bot.send_message(message.chat.id, "Для возобновления работы нажмите /get ")
+        await bot.send_message(message.chat.id, f"Города {city_name} не существует")
+        await bot.send_message(message.chat.id, "Для возобновления работы нажмите /get ")
 
-
-def get_admin_month_of_city_from_sells(message, city_name):
-    month_check = str(message.text)
+@bot.message_handler(state=SellsStates.month)
+async def month_get_sells_city_user(message):
+    async with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
+        data['month'] = message.text
+    #await bot.send_message(message.chat.id, data['month'])
+    await bot.delete_state(message.from_user.id, message.chat.id)
+    month_check = data['month']
     if month_check.isdigit():
-        month_number = int(message.text)
+        month_number = int(month_check)
         if month_number == 0 or 1 <= month_number <= 12:
-            bot.send_message(message.chat.id, "Ваш запрос обрабатывается, пожалуйста подождите")
-            reading_from_sells_sheet(city_name, month_number, message.chat.id)
+            await bot.send_message(message.chat.id, "Ваш запрос обрабатывается, пожалуйста подождите")
+            await reading_from_sells_sheet(sells_city, month_number, message.chat.id)
         else:
-            bot.send_message(message.chat.id, f"{month_number} месяца не существует")
-            bot.send_message(message.chat.id, "Для возобновления работы нажмите /get ")
+            await bot.send_message(message.chat.id, f"{month_number} месяца не существует")
+            await bot.send_message(message.chat.id, "Для возобновления работы нажмите /get ")
     else:
-        bot.send_message(message.chat.id, f"{message.text} не является месяцом")
-        bot.send_message(message.chat.id, "Для возобновления работы нажмите /get ")
+        await bot.send_message(message.chat.id, f"{message.text} не является месяцом")
+        await bot.send_message(message.chat.id, "Для возобновления работы нажмите /get ")
+
+@bot.message_handler()
+async def not_supported_command(message):
+    await bot.send_message(message.chat.id, "Данной команды не существует")
+    await bot.send_message(message.chat.id, "Для возобновления работы нажмите /get ")
+
+bot.add_custom_filter(asyncio_filters.StateFilter(bot))
 
 
-bot.polling(none_stop=True)
+import asyncio
+asyncio.run(bot.polling(none_stop=True))

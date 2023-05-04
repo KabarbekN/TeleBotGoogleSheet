@@ -1,16 +1,12 @@
 import os
-import random
-import time
 from datetime import datetime
 
 import googleapiclient.discovery
 import httplib2
-import numpy as np
 import telebot
 from googleapiclient import discovery
 from oauth2client.service_account import ServiceAccountCredentials
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-
+from telebot.async_telebot import AsyncTeleBot
 CREDENTIALS_FILE = r"C:\Users\Nurgissa\PycharmProjects\TeleBotSheet\key_for_google_cloud\speedy-toolbox-384010-87d27fc12adc.json"  # Имя файла с закрытым ключом, вы должны подставить свое
 spreadsheet_id = '1rZG1wfIw7oetjxISh-8Z7jrPT3KBvZJr-B8dExGU_uA'
 GMAIL_ACCOUNT = 'nkabarbek@gmail.com'
@@ -29,10 +25,10 @@ driveService = googleapiclient.discovery.build('drive', 'v3',
                                                http=httpAuth)  # Выбираем работу с Google Drive и 3 версию API
 BOT_TOKEN = '6045455125:AAHaNlRQOww3BHNe3rVms0BI9beuUiGD9d4'
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = AsyncTeleBot(BOT_TOKEN)
 
 
-def download_file_from_google_sheet(spreadsheetId, city_name, chatId, document_name):
+async def download_file_from_google_sheet(spreadsheetId, city_name, chatId, document_name):
     # Set the format you want to export the file to
     EXPORT_MIMETYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     # Set the path where you want to save the exported file
@@ -63,12 +59,20 @@ def download_file_from_google_sheet(spreadsheetId, city_name, chatId, document_n
 
     document_path = new_file_path_name
     document = open(document_path, 'rb')
-    bot.send_document(chatId, document)
+    await bot.send_document(chatId, document)
     document.close()
+    await bot.send_message(chatId, "Для продолжения работы нажмите /get ")
+
     print(document_path)
 
+    # try:
+    #     os.rename(new_file_path_name, standard_file_path_name)
+    #     print("File renamed successfully.")
+    # except OSError as error:
+    #     print(error)
+
     try:
-        os.rename(new_file_path_name, standard_file_path_name)
-        print("File renamed successfully.")
+        os.remove(new_file_path_name)
+        print(f"File '{new_file_path_name}' has been deleted successfully!")
     except OSError as error:
-        print(error)
+        print(f"Error deleting file '{new_file_path_name}': {error}")

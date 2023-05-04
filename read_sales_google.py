@@ -1,19 +1,13 @@
-import os
-import random
-import time
-from datetime import datetime
-
 import googleapiclient.discovery
 import httplib2
 import numpy as np
 import telebot
 from googleapiclient import discovery
 from oauth2client.service_account import ServiceAccountCredentials
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from access_file_in_google_sheet import give_access_from_google_drive
 from download_send_file import download_file_from_google_sheet
-
+from telebot.async_telebot import AsyncTeleBot
 CREDENTIALS_FILE = r"C:\Users\Nurgissa\PycharmProjects\TeleBotSheet\key_for_google_cloud\speedy-toolbox-384010-87d27fc12adc.json"  # Имя файла с закрытым ключом, вы должны подставить свое
 spreadsheet_id = '1rZG1wfIw7oetjxISh-8Z7jrPT3KBvZJr-B8dExGU_uA'
 GMAIL_ACCOUNT = 'nkabarbek@gmail.com'
@@ -32,11 +26,11 @@ driveService = googleapiclient.discovery.build('drive', 'v3',
                                                http=httpAuth)  # Выбираем работу с Google Drive и 3 версию API
 BOT_TOKEN = '6045455125:AAHaNlRQOww3BHNe3rVms0BI9beuUiGD9d4'
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = AsyncTeleBot(BOT_TOKEN)
 
 
 
-def reading_from_sells_sheet(city_name, month_number, chatId):
+async def reading_from_sells_sheet(city_name, month_number, chatId):
     sheet_name = "Пж"
     row_count = 0
     top_values = []
@@ -84,9 +78,9 @@ def reading_from_sells_sheet(city_name, month_number, chatId):
         city_spreadSheetId = ''
 
         try:
-            # result_style = service.spreadsheets().get(spreadsheetId=spreadsheet_id, ranges=[sheet_name],
-            #                                           includeGridData=True).execute()
-            # values_style = result_style['sheets'][0]['data'][0]['rowData']
+            result_style = service.spreadsheets().get(spreadsheetId=spreadsheet_id, ranges=[sheet_name],
+                                                      includeGridData=True).execute()
+            values_style = result_style['sheets'][0]['data'][0]['rowData']
 
             title = f"{city_name}_Список_Продаж"
             spreadsheet = service.spreadsheets().create(body={
@@ -143,48 +137,50 @@ def reading_from_sells_sheet(city_name, month_number, chatId):
                 ).execute()
             except googleapiclient.errors.HttpError as error:
                 print(f'Произошла ошибка: {error}')
-            # batch_update_requests = {
-            #     "requests": [
-            #         {
-            #             "updateCells": {
-            #                 "rows":
-            #                     [
-            #                         values_style
-            #                     ],
-            #                 "start": {
-            #                     "sheetId": 0
-            #                 },
-            #                 "fields": "userEnteredFormat"
-            #             }
-            #         },
-            #         {
-            #             'updateDimensionProperties': {
-            #                 'range': {
-            #                     'dimension': 'COLUMNS',
-            #                     'startIndex': 1,
-            #                     'endIndex': 2,  # update all columns
-            #                     'sheetId': 0,
-            #                 },
-            #                 'properties': {
-            #                     'pixelSize': 500,  # replace with the desired pixel size
-            #                     'hiddenByUser': False,  # replace with the desired visibility setting
-            #                 },
-            #                 'fields': 'pixelSize,hiddenByUser'
-            #             }
-            #         }
-            #     ]
-            # }
-            # try:
-            #     request = service.spreadsheets().batchUpdate(spreadsheetId=city_spreadSheetId,
-            #                                                  body=batch_update_requests)
-            #     response = request.execute()
-            # except googleapiclient.errors.HttpError as error:
-            #     print(f'Произошла ошибка: {error}')
+            batch_update_requests = {
+                "requests": [
+                    {
+                        "updateCells": {
+                            "rows":
+                                [
+                                    values_style
+                                ],
+                            "start": {
+                                "sheetId": 0
+                            },
+                            "fields": "userEnteredFormat"
+                        }
+                    },
+                    {
+                        'updateDimensionProperties': {
+                            'range': {
+                                'dimension': 'COLUMNS',
+                                'startIndex': 1,
+                                'endIndex': 2,  # update all columns
+                                'sheetId': 0,
+                            },
+                            'properties': {
+                                'pixelSize': 500,  # replace with the desired pixel size
+                                'hiddenByUser': False,  # replace with the desired visibility setting
+                            },
+                            'fields': 'pixelSize,hiddenByUser'
+                        }
+                    }
+                ]
+            }
+            try:
+                request = service.spreadsheets().batchUpdate(spreadsheetId=city_spreadSheetId,
+                                                             body=batch_update_requests)
+                response = request.execute()
+            except googleapiclient.errors.HttpError as error:
+                print(f'Произошла ошибка: {error}')
             document_name = "sells"
-            download_file_from_google_sheet(city_spreadSheetId, title, chatId, document_name)
+            await download_file_from_google_sheet(city_spreadSheetId, title, chatId, document_name)
             print('https://docs.google.com/spreadsheets/d/' + city_spreadSheetId)
             driveService.files().delete(fileId=city_spreadSheetId).execute()
         else:
             print("Values data is null")
     else:
-        bot.send_message(chatId, "Города с таким названием нету в базе данных")
+        await bot.send_message(chatId, "Города с таким названием нету в базе данных")
+        await bot.send_message(chatId, "Для возобновления работы нажмите /get ")
+
